@@ -84,6 +84,8 @@
                 console.log("supports websockets");
                 // Connect to websocket
                 conn = new WebSocket("ws://" + document.location.host + "/ws");
+                // conn = new WebSocket("ws://localhost:9000/ws");
+                console.log("Attempting Websocket Connection")
             } else {
                 alert("Not supporting websockets");
             }
