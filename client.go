@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
 
 	"github.com/gorilla/websocket"
@@ -14,10 +15,19 @@ type Client struct {
 	// the websocket connection
 	connection *websocket.Conn
 
+	/*
+		The client’s readMessages should marshal the incoming JSON into
+		an Event and then use the Manager to route it.
+		We will also modify the Clients egress channel to not send
+		raw bytes, but instead Event. This also means we need to change
+		the writeMessages to marshal the data before sending it.
+	*/
+
 	// manager is the manager used to manage the client
 	manager *Manager
 	// egress is used to avoid concurrent writes on the WebSocket
-	egress chan []byte
+	// egress chan []byte
+	egress chan Event
 }
 
 // NewClient is used to initialize a new Client with all required values initialized
@@ -25,7 +35,8 @@ func NewClient(conn *websocket.Conn, manager *Manager) *Client {
 	return &Client{
 		connection: conn,
 		manager:    manager,
-		egress:     make(chan []byte),
+		// egress:     make(chan []byte),
+		egress: make(chan Event),
 	}
 }
 
@@ -42,7 +53,8 @@ func (c *Client) readMessages() {
 	for {
 		// ReadMessage is used to read the next message in queue
 		// in the connection
-		messageType, payload, err := c.connection.ReadMessage()
+		// messageType, payload, err := c.connection.ReadMessage()
+		_, payload, err := c.connection.ReadMessage()
 
 		if err != nil {
 			// If Connection is closed, we will Recieve an error here
@@ -52,8 +64,25 @@ func (c *Client) readMessages() {
 			}
 			break // Break the loop to close conn & Cleanup
 		}
-		log.Println("MessageType: ", messageType)
-		log.Println("Payload: ", string(payload))
+		// log.Println("MessageType: ", messageType)
+		// log.Println("Payload: ", string(payload))
+
+		// Marshal incoming data into a Event struct
+		var request Event
+		if err := json.Unmarshal(payload, &request); err != nil {
+			log.Printf("error marshalling message: %v", err)
+			break // breaking the connection here might be harsh
+
+		}
+		//Route the Event
+		if err := c.manager.routeEvent(request, c); err != nil {
+			log.Println("Error handeling Message: ", err)
+
+		}
+	}
+}
+
+/*
 
 		// Hack to test that WriteMessages works as intended
 		// Will be replaced soon
@@ -62,6 +91,8 @@ func (c *Client) readMessages() {
 		}
 	}
 }
+
+*/
 
 // writeMessages is a process that listens for new messages to output to the Client
 func (c *Client) writeMessages() {
@@ -83,8 +114,14 @@ func (c *Client) writeMessages() {
 				// Return to close the goroutine
 				return
 			}
+			data, err := json.Marshal(message)
+			if err != nil {
+				log.Println(err)
+				return // closes the connection, should we really
+			}
 			// Write a Regular text message to the connection
-			if err := c.connection.WriteMessage(websocket.TextMessage, message); err != nil {
+			//if err := c.connection.WriteMessage(websocket.TextMessage, message); err != nil {
+			if err := c.connection.WriteMessage(websocket.TextMessage, data); err != nil {
 				log.Println(err)
 			}
 			log.Println("sent message")
