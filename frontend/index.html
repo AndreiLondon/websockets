@@ -109,6 +109,19 @@
         }
         return false;
       }
+
+      /**
+       * sendEvent
+       * eventname - the event name to send on
+       * payload - the data payload
+       * */
+      function sendEvent(eventName, payload) {
+        // Create a event Object with a event named send_message
+        const event = new Event(eventName, payload);
+        // Format as JSON and send
+        conn.send(JSON.stringify(event));
+      }
+
       /**
        * Once the website loads, we want to apply listeners and connect to websocket
        * */
@@ -125,10 +138,16 @@
           conn = new WebSocket("ws://" + document.location.host + "/ws");
           // conn = new WebSocket("ws://localhost:9000/ws");
           console.log("Attempting Websocket Connection");
-          // Add a listener to the onmessage event
-          conn.onmessage = function (evt) {
-            console.log(evt);
-          };
+     // Add a listener to the onmessage event
+     conn.onmessage = function (evt) {
+                    console.log(evt);
+                    // parse websocket message as JSON
+                    const eventData = JSON.parse(evt.data);
+                    // Assign JSON data to new Event Object
+                    const event = Object.assign(new Event, eventData);
+                    // Let router manage message
+                    routeEvent(event);
+                }
         } else {
           alert("Not supporting websockets");
         }
