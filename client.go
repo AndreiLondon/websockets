@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -49,6 +50,17 @@ func (c *Client) readMessages() {
 		// function is done
 		c.manager.removeClient(c)
 	}()
+
+	// Configure Wait time for Pong response, use Current time + pongWait
+	// This has to be done here to set the first initial timer.
+
+	if err := c.connection.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
+		log.Println(err)
+		return
+	}
+
+	c.connection.SetPongHandler(c.pongHandler)
+
 	// Loop Forever
 	for {
 		// ReadMessage is used to read the next message in queue
@@ -82,6 +94,15 @@ func (c *Client) readMessages() {
 	}
 }
 
+// pongHandler is used to handle PongMessages for the Client
+func (c *Client) pongHandler(pongMsg string) error {
+	// Current time + Pong Wait time
+	log.Println("pong")
+
+	return c.connection.SetReadDeadline(time.Now().Add(pongWait))
+
+}
+
 /*
 
 		// Hack to test that WriteMessages works as intended
@@ -96,7 +117,16 @@ func (c *Client) readMessages() {
 
 // writeMessages is a process that listens for new messages to output to the Client
 func (c *Client) writeMessages() {
+	/*
+		defer func() {
+			// Graceful close if this triggers a closing
+			c.manager.removeClient(c)
+		}()
+	*/
+	// Create a ticker that triggers a ping at given interval
+	ticker := time.NewTicker(pingInterval)
 	defer func() {
+		ticker.Stop()
 		// Graceful close if this triggers a closing
 		c.manager.removeClient(c)
 	}()
@@ -125,7 +155,24 @@ func (c *Client) writeMessages() {
 				log.Println(err)
 			}
 			log.Println("sent message")
+
+		case <-ticker.C:
+			log.Println("ping")
+			// Send the Ping
+			if err := c.connection.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
+				log.Println("writemsg: ", err)
+				return // return to break this goroutine triggeing cleanup
+			}
 		}
 
 	}
 }
+
+var (
+	// pongWait is how long we will await a pong response from client
+	pongWait = 10 * time.Second
+	// pingInterval has to be less than pongWait, We cant multiply by 0.9 to get 90% of time
+	// Because that can make decimals, so instead *9 / 10 to get 90%
+	// The reason why it has to be less than PingRequency is becuase otherwise it will send a new Ping before getting response
+	pingInterval = (pongWait * 9) / 10
+)
