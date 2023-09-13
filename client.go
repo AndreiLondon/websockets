@@ -54,6 +54,10 @@ func (c *Client) readMessages() {
 	// Configure Wait time for Pong response, use Current time + pongWait
 	// This has to be done here to set the first initial timer.
 
+	// Set Max Size of Messages in Bytes
+	c.connection.SetReadLimit(512)
+	// If you restart and try sending a long message, the connection will close.
+
 	if err := c.connection.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
 		log.Println(err)
 		return
